@@ -20,7 +20,7 @@ sudo apt upgrade
 #include <stdlib.h> // atof
 
 // definicoes dos atomos
-typedef enum{
+typedef enum {
     ERRO,
     ENDOFFILE,
     ENDOFSTRING,
@@ -50,75 +50,44 @@ typedef enum{
     EXCLAMACAO,
     ECOMERCIAL,
     PIPE // fim de buffer
-}TAtomo;
+} TAtomo;
 
-typedef struct{
+typedef struct {
     TAtomo atomo;
     int linha;
     char identificador[15];
-}TInfoAtomo;
+} TInfoAtomo;
 
 // declaracao de variaveis globais
 
-char *entrada = NULL;
-
-char *strAtomo[] = {
-    "ERRO",
-    "ENDOFFILE",
-    "ENDOFSTRING",
-    "COMENTARIO",
-    "ID",
-    "INT",
-    "CHAR",
-    "VOID",
-    "PONTO_VIRGULA",
-    "ABRE_PAR",
-    "FECHA_PAR",
-    "ABRE_CHAVES",
-    "FECHA_CHAVES",
-    "ASPAS",
-    "IF",
-    "ELSE",
-    "WHILE",
-    "MAIN",
-    "READINT",
-    "WRITEINT",
-    "VIRGULA",
-    "INTCONST",
-    "CHARCONST",
-    "IGUAL",
-    "MAIOR",
-    "MENOR",
-    "EXCLAMACAO",
-    "ECOMERCIAL",
-    "PIPE"
+int contaLinha = 1;
+char *entrada = NULL,
+*strAtomo[] = {
+    "erro", "endoffile", "endofstring", "comentario", "id", "int", "char", "void",
+    "ponto_virgula", "abre_par", "fecha_par", "abre_chaves", "fecha_chaves", "aspas",
+    "if", "else", "while", "main", "readint", "writeint", "virgula", "intconst",
+    "charconst", "igual", "maior", "menor", "exclamacao", "ecomercial", "pipe"
+},
+*palavras_reservadas[] = {
+    "int", "char", "void", "if", "else", "while", "main", "readint", "writeint"
 };
 
-int contaLinha = 1;
-
 // declaracao da funcao
-
 TInfoAtomo obter_atomo();
 TInfoAtomo reconhece_id();
 TInfoAtomo reconhece_int();
-TInfoAtomo reconhece_char();
-TInfoAtomo reconhece_comentario_simples();
-TInfoAtomo reconhece_comentario_composto();
+TInfoAtomo reconhece_comentario();
 
-int main(int argc, char *argv[]){
-
+int main(int num_argumentos, char **argumentos) {
     // verifica se o nome do arquivo foi passado como argumento
-    if (argc != 2) {
-        printf("%s\n", argv[0]);
+    if (num_argumentos < 2) {
+        printf("Uso: %s <arquivo>\n", argumentos[0]);
         return 1;
     }
 
-    FILE *arquivo;
-
-    arquivo = fopen(argv[1], "r");
-
+    FILE *arquivo = fopen(argumentos[1], "r");
     if (arquivo == NULL) {
-        printf("Erro na abertura do arquivo!\n");
+        printf("Erro ao abrir o arquivo %s!\n", argumentos[1]);
         return 1;
     }
 
@@ -126,7 +95,7 @@ int main(int argc, char *argv[]){
     fseek(arquivo, 0, SEEK_END);
     long tamanho = ftell(arquivo);
     fseek(arquivo, 0, SEEK_SET);
-        
+    
     // aloca memória para o conteúdo do arquivo
     char *buffer = (char *)malloc(tamanho + 1);
     if (buffer == NULL) {
@@ -134,7 +103,7 @@ int main(int argc, char *argv[]){
         fclose(arquivo);
         return 1;
     }
-        
+    
     // lê o conteúdo de um arquivo e armazena os dados em um buffer
     size_t lidos = fread(buffer, 1, tamanho, arquivo);
     buffer[lidos] = '\0';  // Adiciona o terminador nulo
@@ -143,38 +112,37 @@ int main(int argc, char *argv[]){
     fclose(arquivo);
 
     TInfoAtomo info_atm;
-
-    do{
+    do {
         info_atm = obter_atomo();
 
         // FUNCAO DO SINTATICO
-
-        printf("%03d# %s", info_atm.linha,strAtomo[info_atm.atomo]);
-        if(info_atm.atomo == ID){
+        printf("#  %d:%s", info_atm.linha, strAtomo[info_atm.atomo]);
+        if (info_atm.atomo == ID) {
             printf(" | %s", info_atm.identificador);
         }
         printf("\n");
 
-    }while(info_atm.atomo != ERRO && info_atm.atomo != ENDOFFILE);
+    } while (info_atm.atomo != ERRO && info_atm.atomo != ENDOFFILE);
 
     free(buffer);
 
-    printf("Fim de analise lexica e sintatica!\n");
+    printf("%d linhas analisadas, programa sintaticamente correto", contaLinha);
 }
 
-// LEXICO ---------------------------------------------------------------------------------------------------
-
+// ---------- LEXICO ----------
 // implementacao da funcao
-TInfoAtomo obter_atomo(){
+TInfoAtomo obter_atomo() {
     TInfoAtomo info_atomo;
     info_atomo.atomo = ERRO;
 
+    if (*entrada == '\0') {
+        info_atomo.atomo = ENDOFFILE;
+        return info_atomo;
+    }
+
     // eliminar delimitadores
-    while(*entrada == ' '|| 
-          *entrada == '\n'||
-          *entrada == '\r'||
-          *entrada == '\t'){
-        if(*entrada == '\n')
+    while (*entrada == ' ' || *entrada == '\n' || *entrada == '\r' || *entrada == '\t') {
+        if (*entrada == '\n')
             contaLinha++;
         entrada++;
     }
@@ -238,50 +206,57 @@ TInfoAtomo obter_atomo(){
             entrada++;           
             break;
         default:
-            if(isdigit(*entrada)){
+            if (isdigit(*entrada)) {
                 info_atomo = reconhece_int();
-            } 
-            else if(isalpha(*entrada) || *entrada == '_'){
+            } else if (isalpha(*entrada) || *entrada == '_') {
                 info_atomo = reconhece_id();
-            }
-            else if(*entrada == '/' && *(entrada + 1) == '/'){
-                info_atomo = reconhece_comentario_simples();
-            }
-            else if(*entrada == '/' && *(entrada + 1) == '*'){
-                info_atomo = reconhece_comentario_composto();
+            } else if (*entrada == '/' && (*(entrada + 1) == '/' || *(entrada + 1) == '*')) {
+                info_atomo = reconhece_comentario();
             }
             break;
-    }    
-    
+    }
+
     info_atomo.linha = contaLinha;
-    
     return info_atomo;
 }
 
 // IDENTIFICADOR -> (LETRA_MINUSCULA | LETRA_MAIUSCULA | _)+(LETRA_MINUSCULA | LETRA_MAIUSCULA | _ | DIGITO)*
-TInfoAtomo reconhece_id(){
+TInfoAtomo reconhece_id() {
     TInfoAtomo info_id;
     char *ini_id = entrada;
     int count = 1;
     info_id.atomo = ERRO;
 
-    if(isalpha(*entrada) || *entrada == '_') {
-        entrada ++;// consome letra maiuscula, minuscula ou _
+    TAtomo tipos_reservados[] = {
+        INT, CHAR, VOID, IF, ELSE, WHILE, MAIN, READINT, WRITEINT
+    };
+
+    if (isalpha(*entrada) || *entrada == '_') {
+        entrada++; // consome letra maiuscula, minuscula ou _
         goto q1;
     }
     return info_id;
+
 q1:
-    if (count > 15) { // Excedeu 15 caracteres
-        return info_id;
+    if (count > 15) {
+        return info_id; // Excedeu 15 caracteres
     }
-    if(isalpha(*entrada) || *entrada == '_' || isdigit(*entrada)){
+    if (isalpha(*entrada) || *entrada == '_' || isdigit(*entrada)) {
         count++;
-        entrada ++;// consome letra maiuscula, minuscula ou _
+        entrada++; // consome letra maiuscula, minuscula ou _
         goto q1;
     }
-    
-    info_id.atomo = ID;
 
+    for (int i = 0; i < sizeof(palavras_reservadas) / sizeof(palavras_reservadas[0]); i++) {
+        size_t len_reservada = strlen(palavras_reservadas[i]);
+
+        if (entrada - ini_id == len_reservada && strncmp(ini_id, palavras_reservadas[i], len_reservada) == 0) {
+            info_id.atomo = tipos_reservados[i];
+            return info_id;
+        }
+    }
+
+    info_id.atomo = ID;
     strncpy(info_id.identificador, ini_id, entrada - ini_id);
     info_id.identificador[entrada - ini_id] = '\0';
 
@@ -289,11 +264,11 @@ q1:
 }
 
 // INT -> DIGITO+
-TInfoAtomo reconhece_int(){
+TInfoAtomo reconhece_int() {
     TInfoAtomo info_int;
     info_int.atomo = ERRO;
 
-    if(isdigit(*entrada)){
+    if (isdigit(*entrada)) {
         entrada++;
         goto q1;
     }
@@ -301,7 +276,7 @@ TInfoAtomo reconhece_int(){
     return info_int;
 
 q1:
-    if(isdigit(*entrada)){
+    if (isdigit(*entrada)) {
         entrada++;
         goto q1;
     }
@@ -323,33 +298,33 @@ TInfoAtomo reconhece_char(){
     return info_char;
 }
 
-// COMENTARIO SIMPLES
-TInfoAtomo reconhece_comentario_simples(){
+// COMENTARIO
+TInfoAtomo reconhece_comentario() {
     TInfoAtomo info_coment;
     info_coment.atomo = COMENTARIO;
 
-    while (*entrada != '\n' && *entrada != '\0') {
-        entrada++; 
-    }
-
-    return info_coment;
-}
-
-// COMENTARIO COMPOSTO
-TInfoAtomo reconhece_comentario_composto(){
-    TInfoAtomo info_coment;
-    info_coment.atomo = COMENTARIO;
-
-    entrada++;
-    while (*entrada != '\0' && !(*entrada == '*' && *(entrada + 1) == '/')) {
-        if (*entrada == '\n') contaLinha++; 
+    if (*entrada == '/') {
         entrada++;
-    }
+        if (*entrada == '/') {
+            entrada++;
 
-    if (*entrada == '*') entrada += 2;
+            while (*entrada != '\0' && *entrada != '\n') {
+                entrada++;
+            } 
+        } else if (*entrada == '*') {
+            entrada++;
+
+            while (*entrada != '\0' && !(*entrada == '*' && *(entrada + 1) == '/')) {
+                if (*entrada == '\n')
+                    contaLinha++;
+                entrada++;
+            }
+            
+            if (*entrada == '*' && *(entrada + 1) == '/') {
+                entrada += 2;
+            }
+        }
+    }
 
     return info_coment;
 }
-
-
-// SINTATICO ---------------------------------------------------------------------------------------------------
